@@ -21,11 +21,8 @@ def connect_db():
 input_path = "src/resources/input"
 csv_path = input_path + "/electricity-generation_emissions_sources_ownership.csv"
 xlsx_path = input_path + "/Global-Nuclear-Power-Tracker-October-2023.xlsx"
-# csv_data = pd.read_csv(csv_path)
-# xlsx_data = pd.read_excel(xlsx_path, sheet_name="Data")
 
-# combined_data = pd.concat([csv_data, xlsx_data], ignore_index=True)
-# print(combined_data)
+pd.set_option('display.max_columns', None)
 
 def read_data(csv_path, xlsx_path):
     csv_data = pd.read_csv(csv_path)
@@ -93,10 +90,6 @@ def etl_pipeline(csv_path, xlsx_path, conn):
     
     # Create metadata column
     combined_data['metadata'] = combined_data.apply(lambda row: {'source': 'csv' if row.name < len(csv_data) else 'xlsx'}, axis=1)
-    
-    pd.set_option('display.max_columns', None)
-    # pd.set_option('display.max_rows', None)
-    # pd.set_option('display.width', None)
 
     print(combined_data)
     # Load transformed data into PostgreSQL
