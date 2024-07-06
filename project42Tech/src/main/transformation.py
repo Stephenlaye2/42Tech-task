@@ -4,6 +4,7 @@ import psycopg2
 from fuzzywuzzy import fuzz, process
 import uuid
 import config
+import json
 
 import os
 
@@ -23,10 +24,17 @@ csv_path = input_path + "/electricity-generation_emissions_sources_ownership.csv
 xlsx_path = input_path + "/Global-Nuclear-Power-Tracker-October-2023.xlsx"
 
 pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 999)
+# pd.set_option('display.width', 999)
+# csv_data = pd.read_csv(csv_path)
+# xlsx_data = pd.read_excel(xlsx_path, sheet_name="data")
+
 
 def read_data(csv_path, xlsx_path):
     csv_data = pd.read_csv(csv_path)
+    csv_data.rename(columns={"iso3_country":"country"}, inplace=True)
     xlsx_data = pd.read_excel(xlsx_path, sheet_name="Data")
+    xlsx_data.rename(columns={"Owner":"company_name", "Latitude":"lat", "Construction Start Date":"start_date", "Longitude":"lon", "Retirement Date":"end_date", "Project Name":"asset", "GEM location ID":"indicator"}, inplace=True)
     return csv_data, xlsx_data
 
 # company names normalisation
@@ -54,9 +62,9 @@ def load_to_postgresql(df, table_name, conn):
         surrogate_key UUID PRIMARY KEY,
         source_id TEXT,
         company_name TEXT,
-        asset_name TEXT,
-        indicator_name TEXT,
-        indicator_value FLOAT,
+        asset TEXT,
+        indicator TEXT,
+        
         metadata JSONB
     );
     '''
@@ -66,13 +74,13 @@ def load_to_postgresql(df, table_name, conn):
     # Insert record into the table from df
     for index, row in df.iterrows():
         cursor.execute(
-            f"INSERT INTO {table_name} (surrogate_key, source_id, company_name, asset_name, indicator_name, indicator_value, metadata) VALUES (%s, %s, %s, %s, %s, %s)",
-            (generate_unique_id(), row['source_id'], row['company_name'], row['asset_name'], row['indicator_name'], row['indicator_value'], row['metadata'])
+            f"INSERT INTO {table_name} (surrogate_key, source_id, company_name, asset, indicator, metadata) VALUES (%s, %s, %s, %s, %s, %s)",
+            (generate_unique_id(), row['source_id'], row['company_name'], row['asset'], row['indicator'], json(row['metadata']))
         )
     conn.commit()
 
 # Main ETL function
-def etl_pipeline(csv_path, xlsx_path, conn):
+def etl_pipeline(csv_path, xlsx_path):
     csv_data, xlsx_data = read_data(csv_path, xlsx_path)
     
     # Combine data into a single dataframe
@@ -91,10 +99,10 @@ def etl_pipeline(csv_path, xlsx_path, conn):
     # Create metadata column
     combined_data['metadata'] = combined_data.apply(lambda row: {'source': 'csv' if row.name < len(csv_data) else 'xlsx'}, axis=1)
 
-    print(combined_data)
-    # Load transformed data into PostgreSQL
-    # load_to_postgresql(combined_data, 'unified_42Tech_data', conn)
+    return combined_data
 
-# Run the ETL pipeline
 conn = connect_db()
-etl_pipeline(csv_path, xlsx_path, conn)
+
+if __name__ == "__main__":
+    load_to_postgresql(etl_pipeline(csv_path, xlsx_path), 'unified_42Tech_data', conn)
+    
